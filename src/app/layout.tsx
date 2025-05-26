@@ -2,8 +2,10 @@ import "h8/styles/globals.css";
 
 import { type Metadata } from "next";
 import { Geist } from "next/font/google";
+import { SessionProvider } from "next-auth/react";
 
 import { TRPCReactProvider } from "h8/trpc/react";
+import { AuthButton } from "./_components/AuthButton";
 
 export const metadata: Metadata = {
   title: "Create T3 App",
@@ -22,7 +24,12 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${geist.variable}`}>
       <body>
-        <TRPCReactProvider>{children}</TRPCReactProvider>
+        <SessionProvider>
+          <TRPCReactProvider>
+            <AuthButton />
+            {children}
+          </TRPCReactProvider>
+        </SessionProvider>
       </body>
     </html>
   );

@@ -11,8 +11,9 @@ import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import { ZodError } from "zod";
 
-import { auth } from "h8/server/auth";
-import { db } from "h8/server/db";
+// Fixed import paths to match your project structure
+import { auth } from "../../server/auth";
+import { db } from "../../server/mongodb";
 
 /**
  * 1. CONTEXT
