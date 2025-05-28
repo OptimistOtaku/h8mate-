@@ -37,7 +37,7 @@ export const authConfig = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
-          return null;
+          throw new Error("Please enter both email and password");
         }
 
         const email = credentials.email as string;
@@ -51,7 +51,7 @@ export const authConfig = {
           if (name) {
             const existingUser = await User.findOne({ email });
             if (existingUser) {
-              throw new Error("Email already exists");
+              throw new Error("An account with this email already exists. Please sign in instead.");
             }
 
             const user = await User.create({
@@ -61,7 +61,7 @@ export const authConfig = {
             });
 
             if (!user || !user._id) {
-              throw new Error("Failed to create user");
+              throw new Error("Failed to create account. Please try again.");
             }
 
             return {
@@ -74,16 +74,16 @@ export const authConfig = {
           // If it's a login attempt
           const user = await User.findOne({ email }).exec() as IUser | null;
           if (!user) {
-            throw new Error("No user found with this email");
+            throw new Error("No account found with this email. Please sign up first.");
           }
 
           const isValid = await user.comparePassword(password);
           if (!isValid) {
-            throw new Error("Invalid password");
+            throw new Error("Incorrect password. Please try again.");
           }
 
           if (!user._id) {
-            throw new Error("User ID not found");
+            throw new Error("Account error. Please try again.");
           }
 
           return {
@@ -117,5 +117,6 @@ export const authConfig = {
   },
   pages: {
     signIn: "/", // Custom sign-in page
+    error: "/auth/error", // Custom error page
   },
 } satisfies NextAuthConfig;

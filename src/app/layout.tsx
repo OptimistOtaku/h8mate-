@@ -5,7 +5,6 @@ import { Geist } from "next/font/google";
 import { SessionProvider } from "next-auth/react";
 
 import { TRPCReactProvider } from "h8/trpc/react";
-import { AuthButton } from "./_components/AuthButton";
 
 export const metadata: Metadata = {
   title: "Create T3 App",
@@ -26,7 +25,6 @@ export default function RootLayout({
       <body>
         <SessionProvider>
           <TRPCReactProvider>
-            <AuthButton />
             {children}
           </TRPCReactProvider>
         </SessionProvider>

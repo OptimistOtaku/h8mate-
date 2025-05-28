@@ -7,8 +7,9 @@ import {
   useSensor,
   useSensors,
   PointerSensor,
+  useDroppable,
 } from "@dnd-kit/core";
-import type { DragEndEvent } from "@dnd-kit/core";
+import type { DragEndEvent, DragStartEvent, DragOverEvent } from "@dnd-kit/core";
 import {
   SortableContext,
   verticalListSortingStrategy,
@@ -16,6 +17,7 @@ import {
 } from "@dnd-kit/sortable";
 import { SortableItem } from "./SortableItem";
 import Comments from "./Comments";
+import { AuthButton } from "./AuthButton";
 
 interface Tier {
   id: string;
@@ -102,16 +104,28 @@ export default function TierList() {
   useEffect(() => {
     const loadTierList = async () => {
       try {
+        console.log('Loading tier list...');
         const response = await fetch('/api/tierlist');
-        if (!response.ok) throw new Error('Failed to load tier list');
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to load tier list');
+        }
         const data = await response.json();
         
         if (data.tiers && data.bin) {
+          console.log('Tier list loaded successfully');
           setTiers(data.tiers);
           setBin(data.bin);
+        } else {
+          console.log('No saved tier list found, using defaults');
+          setTiers(defaultTiers);
+          setBin(defaultBin);
         }
       } catch (error) {
         console.error('Error loading tier list:', error);
+        alert('Failed to load tier list. Using default tiers.');
+        setTiers(defaultTiers);
+        setBin(defaultBin);
       } finally {
         setIsLoading(false);
       }
@@ -126,6 +140,7 @@ export default function TierList() {
       if (isLoading) return; // Don't save during initial load
 
       try {
+        console.log('Saving tier list...');
         // Validate data before sending
         if (!Array.isArray(tiers) || !Array.isArray(bin)) {
           throw new Error('Invalid tier list data structure');
@@ -155,7 +170,6 @@ export default function TierList() {
         console.log('Successfully saved tier list:', savedData);
       } catch (error) {
         console.error('Error saving tier list:', error);
-        // Optionally show an error message to the user
         alert('Failed to save tier list. Please try again.');
       }
     };
@@ -166,7 +180,7 @@ export default function TierList() {
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 8,
+        distance: 4,
       },
     })
   );
@@ -242,9 +256,11 @@ export default function TierList() {
 
   // Create a custom droppable component for tiers
   const DroppableTier = ({ tier }: { tier: Tier }) => {
-    const { setNodeRef } = useSortable({
+    const { setNodeRef } = useDroppable({
       id: tier.id,
-    });    const getTierColor = (tierId: string) => {
+    });
+
+    const getTierColor = (tierId: string) => {
       switch (tierId) {
         case 'Ruhani level':
           return 'bg-gradient-to-r from-red-500 to-red-600 text-white';
@@ -259,7 +275,9 @@ export default function TierList() {
         default:
           return 'bg-gray-100';
       }
-    };    return (
+    };
+
+    return (
       <div
         ref={setNodeRef}
         className={`mb-6 rounded-xl shadow-lg overflow-visible transform hover:scale-[1.02] transition-all
@@ -271,25 +289,25 @@ export default function TierList() {
               {tier.id}
             </span>
           </h2>
-          <SortableContext items={tier.items} strategy={verticalListSortingStrategy}>
-            <div className="flex gap-3 flex-wrap p-2 min-h-[80px] bg-white/10 rounded-lg relative">{tier.items.map((item) => (
-                <div key={item} onClick={() => handleItemClick(item, tier.id)}>
-                  <SortableItem 
-                    id={item} 
-                    name={item}
-                    isSelected={selectedItem?.name === item} 
-                  />
+          <div className="flex gap-3 flex-wrap p-2 min-h-[80px] bg-white/10 rounded-lg relative group">
+            {tier.items.map((item) => (
+              <div key={item} onClick={() => handleItemClick(item, tier.id)}>
+                <SortableItem 
+                  id={item} 
+                  name={item}
+                  isSelected={selectedItem?.name === item} 
+                />
+              </div>
+            ))}
+            {tier.items.map((item) => 
+              selectedItem?.name === item && (
+                <div key={`comment-${item}`} className="mt-4 w-full">
+                  <Comments tierId={tier.id} classmateName={item} />
                 </div>
-              ))}
-              {tier.items.map((item) => 
-                selectedItem?.name === item && (
-                  <div key={`comment-${item}`} className="mt-4 w-full">
-                    <Comments tierId={tier.id} classmateName={item} />
-                  </div>
-                )
-              )}
-            </div>
-          </SortableContext>
+              )
+            )}
+            <div className="absolute inset-0 bg-white/5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+          </div>
         </div>
       </div>
     );
@@ -299,14 +317,17 @@ export default function TierList() {
     if (window.confirm('Are you sure you want to reset all tiers? This cannot be undone.')) {
       setIsLoading(true);
       try {
+        console.log('Resetting tier list...');
         const response = await fetch('/api/tierlist', {
           method: 'DELETE',
         });
         
         if (!response.ok) {
-          throw new Error('Failed to reset tiers');
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to reset tiers');
         }
 
+        console.log('Tier list reset successfully');
         setTiers(defaultTiers);
         setBin(defaultBin);
         setSelectedItem(null);
@@ -319,15 +340,23 @@ export default function TierList() {
     }
   }, []);
 
-  return (    <div className="relative max-w-3xl mx-auto">
-      <button
-        onClick={handleReset}
-        disabled={isLoading}
-        className="fixed left-4 top-1/2 transform -translate-y-1/2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed z-10"
-      >
-        {isLoading ? 'Resetting...' : 'Reset All Tiers'}
-      </button>
-      <div className="flex flex-col mb-8 px-8">
+  return (
+    <div className="relative max-w-3xl mx-auto">
+      <div className="fixed top-4 left-4 z-10">
+        <button
+          onClick={handleReset}
+          disabled={isLoading}
+          className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {isLoading ? 'Resetting...' : 'Reset All Tiers'}
+        </button>
+      </div>
+
+      <div className="fixed top-4 right-4 z-10">
+        <AuthButton />
+      </div>
+
+      <div className="flex flex-col mb-8 px-8 pt-16">
         <div className="text-center">
           <h1 className="text-5xl font-black mb-2 animate-bounce-slow">
             <span className="bg-clip-text text-transparent bg-gradient-to-r from-pink-500 via-red-500 to-yellow-500 animate-gradient">
@@ -339,9 +368,9 @@ export default function TierList() {
           </div>
         </div>
       </div>
+
       <DndContext
         sensors={sensors}
-        collisionDetection={closestCenter}
         onDragEnd={handleDragEnd}
       >
         <div className="space-y-4">
@@ -352,17 +381,16 @@ export default function TierList() {
 
         {/* Bin for unassigned classmates */}
         <div
-          ref={useSortable({ id: "bin" }).setNodeRef}
-          className="mt-8 p-6 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 shadow-xl border-4 border-white"
+          ref={useDroppable({ id: "bin" }).setNodeRef}
+          className="mt-8 p-6 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 shadow-xl border-4 border-white group"
         >
           <h2 className="text-2xl font-bold text-center mb-4 text-white">Unassigned Classmates</h2>
-          <SortableContext items={bin} strategy={verticalListSortingStrategy}>
-            <div className="flex gap-3 flex-wrap p-4 bg-white/10 rounded-lg min-h-[100px]">
-              {bin.map((name) => (
-                <SortableItem key={name} id={name} name={name} />
-              ))}
-            </div>
-          </SortableContext>
+          <div className="flex gap-3 flex-wrap p-4 bg-white/10 rounded-lg min-h-[100px] relative">
+            {bin.map((name) => (
+              <SortableItem key={name} id={name} name={name} />
+            ))}
+            <div className="absolute inset-0 bg-white/5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+          </div>
         </div>
       </DndContext>
     </div>
