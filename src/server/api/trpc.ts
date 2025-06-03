@@ -13,7 +13,7 @@ import { ZodError } from "zod";
 
 // Fixed import paths to match your project structure
 import { auth } from "../../server/auth";
-import { db } from "../../server/mongodb";
+import { connectToDatabase } from "../../server/mongodb";
 
 /**
  * 1. CONTEXT
@@ -29,9 +29,9 @@ import { db } from "../../server/mongodb";
  */
 export const createTRPCContext = async (opts: { headers: Headers }) => {
   const session = await auth();
+  await connectToDatabase();
 
   return {
-    db,
     session,
     ...opts,
   };

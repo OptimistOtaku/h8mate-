@@ -1,9 +1,8 @@
-import { type DefaultSession, type NextAuthConfig } from "next-auth";
-import CredentialsProvider from "next-auth/providers/credentials";
+import type { NextAuthConfig, DefaultSession } from "next-auth";
+import Credentials from "next-auth/providers/credentials";
+import { User } from "../models/User";
 import { connectToDatabase } from "../mongodb";
-import User from "../models/User";
 import type { IUser } from "../models/User";
-import type { Document } from "mongoose";
 
 /**
  * Module augmentation for `next-auth` types. Allows us to add custom properties to the `session`
@@ -28,7 +27,7 @@ export const authConfig = {
   secret: process.env.NEXTAUTH_SECRET,
   trustHost: true,
   providers: [
-    CredentialsProvider({
+    Credentials({
       name: "Credentials",
       credentials: {
         email: { label: "Email", type: "email" },
@@ -37,86 +36,45 @@ export const authConfig = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
-          throw new Error("Please enter both email and password");
+          throw new Error("Please enter your email and password");
         }
-
-        const email = credentials.email as string;
-        const password = credentials.password as string;
-        const name = credentials.name as string | undefined;
 
         await connectToDatabase();
 
-        try {
-          // If it's a signup attempt (name is provided)
-          if (name) {
-            const existingUser = await User.findOne({ email });
-            if (existingUser) {
-              throw new Error("An account with this email already exists. Please sign in instead.");
-            }
-
-            const user = await User.create({
-              email,
-              password,
-              name,
-            });
-
-            if (!user || !user._id) {
-              throw new Error("Failed to create account. Please try again.");
-            }
-
-            return {
-              id: user._id.toString(),
-              email: user.email,
-              name: user.name,
-            };
-          }
-
-          // If it's a login attempt
-          const user = await User.findOne({ email }).exec() as IUser | null;
-          if (!user) {
-            throw new Error("No account found with this email. Please sign up first.");
-          }
-
-          const isValid = await user.comparePassword(password);
-          if (!isValid) {
-            throw new Error("Incorrect password. Please try again.");
-          }
-
-          if (!user._id) {
-            throw new Error("Account error. Please try again.");
-          }
-
-          return {
-            id: user._id.toString(),
-            email: user.email,
-            name: user.name,
-          };
-        } catch (error) {
-          console.error("Auth error:", error);
-          throw error;
+        const user = await User.findOne({ email: credentials.email }) as IUser | null;
+        if (!user) {
+          throw new Error("No account found with this email. Please sign up first.");
         }
+
+        const isValid = await user.comparePassword(credentials.password as string);
+        if (!isValid) {
+          throw new Error("Incorrect password. Please try again.");
+        }
+
+        return {
+          id: user._id.toString(),
+          email: user.email,
+          name: user.name,
+        };
       },
     }),
   ],
   callbacks: {
-    jwt: async ({ token, user }) => {
+    async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
-        token.email = user.email;
-        token.name = user.name;
       }
       return token;
     },
-    session: ({ session, token }) => ({
-      ...session,
-      user: {
-        ...session.user,
-        id: token.id as string,
-      },
-    }),
+    async session({ session, token }) {
+      if (token && session.user) {
+        session.user.id = token.id as string;
+      }
+      return session;
+    },
   },
   pages: {
-    signIn: "/", // Custom sign-in page
-    error: "/auth/error", // Custom error page
+    signIn: "/",
+    error: "/auth/error",
   },
 } satisfies NextAuthConfig;

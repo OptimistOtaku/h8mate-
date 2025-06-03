@@ -1,24 +1,38 @@
-import mongoose, { Schema, Document, Model } from 'mongoose';
+import mongoose from "mongoose";
+import type { Document, Model } from "mongoose";
 
 export interface IComment extends Document {
-  userId: string;
-  userName: string;
-  text: string;
-  createdAt: Date;
+  content: string;
+  createdBy: mongoose.Types.ObjectId;
   tierId: string;
   classmateName: string;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-const CommentSchema = new Schema({
-  userId: { type: String, required: true },
-  userName: { type: String, required: true },
-  text: { type: String, required: true },
-  createdAt: { type: Date, default: Date.now },
-  tierId: { type: String, required: true },
-  classmateName: { type: String, required: true }
-});
+const commentSchema = new mongoose.Schema(
+  {
+    content: {
+      type: String,
+      required: true,
+    },
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    tierId: {
+      type: String,
+      required: true,
+    },
+    classmateName: {
+      type: String,
+      required: true,
+    },
+  },
+  {
+    timestamps: true,
+  }
+);
 
-// Add type assertion for the model
-const Comment: Model<IComment> = mongoose.models.Comment || mongoose.model<IComment>('Comment', CommentSchema);
-
-export default Comment;
+export const Comment: Model<IComment> = mongoose.models.Comment ?? mongoose.model<IComment>("Comment", commentSchema);

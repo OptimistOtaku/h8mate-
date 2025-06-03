@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { connectToDatabase } from '../../../server/mongodb';
-import Comment from '../../../server/models/Comment';
+import { Comment } from '../../../server/models/Comment';
 import { auth } from '../../../server/auth';
 
 export async function GET(request: Request) {
@@ -23,6 +23,7 @@ export async function GET(request: Request) {
       classmateName 
     })
     .sort({ createdAt: -1 })
+    .populate('createdBy', 'name')
     .limit(100); // Limit number of comments returned
 
     return NextResponse.json(comments);
@@ -36,11 +37,11 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const session = await auth();
-    if (!session || !session.user) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = await request.json();
+    const body = await request.json() as { text: string; tierId: string; classmateName: string };
     const { text, tierId, classmateName } = body;
 
     if (!text || !tierId || !classmateName) {
@@ -60,16 +61,13 @@ export async function POST(request: Request) {
     }
 
     await connectToDatabase();
-    const comment = new Comment({
-      userId: session.user.id,
-      userName: session.user.name || 'Anonymous',
-      text: sanitizedText,
+    const comment = await Comment.create({
+      content: sanitizedText,
+      createdBy: session.user.id,
       tierId,
       classmateName,
-      createdAt: new Date()
     });
 
-    await comment.save();
     return NextResponse.json(comment);
   } catch (error) {
     console.error('Error creating comment:', error);
