@@ -1,27 +1,28 @@
 import mongoose from 'mongoose';
-import { env } from "../env";
 
 let isConnected = false;
-
-export const db = mongoose.connection;
 
 export async function connectToDatabase() {
   if (isConnected) {
     console.log('Using existing MongoDB connection');
-    return;
+    return mongoose.connection;
   }
 
-  if (!env.MONGODB_URI) {
-    throw new Error('MONGODB_URI is not defined');
+  const uri = process.env.MONGODB_URI;
+  if (!uri) {
+    console.error('MongoDB URI is not defined in environment variables');
+    throw new Error('MongoDB URI is not defined in environment variables');
   }
 
   try {
-    console.log('Connecting to MongoDB...');
-    await mongoose.connect(env.MONGODB_URI);
+    console.log('Attempting to connect to MongoDB...');
+    await mongoose.connect(uri);
     isConnected = true;
-    console.log('Connected to MongoDB successfully');
+    console.log('Successfully connected to MongoDB');
+    return mongoose.connection;
   } catch (error) {
-    console.error('Error connecting to MongoDB:', error);
-    throw error;
+    console.error('MongoDB connection error:', error);
+    isConnected = false;
+    throw new Error(`Failed to connect to MongoDB: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }

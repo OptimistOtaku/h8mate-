@@ -1,40 +1,25 @@
-import mongoose from "mongoose";
-import type { Document, Model } from "mongoose";
+import mongoose, { Schema, Model, Document } from 'mongoose';
 
-interface ITierList extends Document {
-  tiers: Array<{
-    name: string;
-    items: string[];
-  }>;
-  bin: string[];
-  createdBy: mongoose.Types.ObjectId;
-  createdAt: Date;
-  updatedAt: Date;
+export interface ITier {
+  id: string;
+  items: string[];
 }
 
-const tierListSchema = new mongoose.Schema(
-  {
-    tiers: [{
-      name: {
-        type: String,
-        required: true,
-      },
-      items: [{
-        type: String,
-      }],
-    }],
-    bin: [{
-      type: String,
-    }],
-    createdBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
-    },
-  },
-  {
-    timestamps: true,
-  }
-);
+export interface ITierList extends Document {
+  tiers: ITier[];
+  bin: string[];
+  lastUpdated: Date;
+}
 
-export const TierList: Model<ITierList> = mongoose.models.TierList ?? mongoose.model<ITierList>("TierList", tierListSchema);
+const TierListSchema = new Schema({
+  tiers: [{
+    id: { type: String, required: true },
+    items: [{ type: String }]
+  }],
+  bin: [{ type: String }],
+  lastUpdated: { type: Date, default: Date.now }
+});
+
+const TierList: Model<ITierList> = mongoose.models.TierList || mongoose.model<ITierList>('TierList', TierListSchema);
+
+export default TierList;

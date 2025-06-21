@@ -4,10 +4,7 @@
  */
 import "./src/env.js";
 
-/** @type {import('next').NextConfig} */
-const config = {
-  reactStrictMode: true,
-  swcMinify: true,
-};
+/** @type {import("next").NextConfig} */
+const config = {};
 
 export default config;

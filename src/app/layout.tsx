@@ -1,8 +1,9 @@
 import "h8/styles/globals.css";
 
 import { type Metadata } from "next";
-import { Geist } from "next/font/google";
-import { SessionProvider } from "next-auth/react";
+import { GeistSans } from "geist/font/sans";
+import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
 
 import { TRPCReactProvider } from "h8/trpc/react";
 
@@ -12,22 +13,25 @@ export const metadata: Metadata = {
   icons: [{ rel: "icon", url: "/favicon.ico" }],
 };
 
-const geist = Geist({
-  subsets: ["latin"],
-  variable: "--font-geist-sans",
-});
+const geistSans = GeistSans;
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
-}: Readonly<{ children: React.ReactNode }>) {
+}: {
+  children: React.ReactNode;
+}) {
+  const supabase = createServerComponentClient({ cookies });
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
   return (
-    <html lang="en" className={`${geist.variable}`}>
-      <body>
-        <SessionProvider>
-          <TRPCReactProvider>
-            {children}
-          </TRPCReactProvider>
-        </SessionProvider>
+    <html lang="en">
+      <body className={`font-sans ${geistSans.variable}`}>
+        <TRPCReactProvider>
+          {children}
+        </TRPCReactProvider>
       </body>
     </html>
   );
