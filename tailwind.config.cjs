@@ -5,6 +5,9 @@ module.exports = {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['var(--font-inter)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+      },
       animation: {
         'bounce-light': 'bounce-light 1s ease-in-out infinite',
         'bounce-slow': 'bounce 3s ease-in-out infinite',

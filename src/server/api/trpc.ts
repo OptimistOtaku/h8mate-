@@ -13,7 +13,7 @@ import { ZodError } from "zod";
 
 // Fixed import paths to match your project structure
 import { auth } from "../../server/auth";
-import { db } from "../../server/mongodb";
+import { supabase } from "../../lib/supabase";
 
 /**
  * 1. CONTEXT
@@ -31,8 +31,8 @@ export const createTRPCContext = async (opts: { headers: Headers }) => {
   const session = await auth();
 
   return {
-    db,
     session,
+    supabase,
     ...opts,
   };
 };

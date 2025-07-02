@@ -1,51 +1,138 @@
-import { createServerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
-import { supabase } from '../supabase';
+import type { NextAuthConfig, DefaultSession } from "next-auth";
+import Credentials from "next-auth/providers/credentials";
+import { supabase } from "../../lib/supabase";
 
-export const createClient = () => {
-  const cookieStore = cookies();
-  
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;
-        },
-        set(name: string, value: string, options: any) {
-          cookieStore.set({ name, value, ...options });
-        },
-        remove(name: string, options: any) {
-          cookieStore.set({ name, value: '', ...options });
-        },
+/**
+ * Module augmentation for `next-auth` types. Allows us to add custom properties to the `session`
+ * object and keep type safety.
+ *
+ * @see https://next-auth.js.org/getting-started/typescript#module-augmentation
+ */
+declare module "next-auth" {
+  interface Session extends DefaultSession {
+    user: {
+      id: string;
+    } & DefaultSession["user"];
+  }
+}
+
+/**
+ * Options for NextAuth.js used to configure adapters, providers, callbacks, etc.
+ *
+ * @see https://next-auth.js.org/configuration/options
+ */
+export const authConfig = {
+  secret: process.env.AUTH_SECRET,
+  trustHost: true,
+  providers: [
+    Credentials({
+      name: "Credentials",
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
+        name: { label: "Name", type: "text", optional: true },
       },
-    }
-  );
-};
+      async authorize(credentials) {
+        if (!credentials?.email || !credentials?.password) {
+          throw new Error("Please enter your email and password");
+        }
 
-export const getSession = async () => {
-  const supabase = createClient();
-  try {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    return session;
-  } catch (error) {
-    console.error('Error:', error);
-    return null;
-  }
-};
+        const email = credentials.email as string;
+        const password = credentials.password as string;
+        const name = credentials.name as string | undefined;
 
-export const getUser = async () => {
-  const supabase = createClient();
-  try {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    return user;
-  } catch (error) {
-    console.error('Error:', error);
-    return null;
-  }
-};
+        try {
+          // Check if user exists
+          const { data: existingUser, error: userError } = await supabase
+            .from('users')
+            .select('*')
+            .eq('email', email)
+            .single();
+
+          if (userError || !existingUser) {
+            // If user doesn't exist and name is provided, create new user
+            if (name) {
+              const { data: newUser, error: signUpError } = await supabase.auth.signUp({
+                email: email,
+                password: password,
+                options: {
+                  data: {
+                    name: name,
+                  }
+                }
+              });
+
+              if (signUpError) {
+                throw new Error(signUpError.message);
+              }
+
+              if (newUser.user) {
+                // Insert user data into users table
+                const { error: insertError } = await supabase
+                  .from('users')
+                  .insert({
+                    id: newUser.user.id,
+                    email: email,
+                    name: name,
+                  });
+
+                if (insertError) {
+                  throw new Error(insertError.message);
+                }
+
+                return {
+                  id: newUser.user.id,
+                  email: email,
+                  name: name,
+                };
+              }
+            } else {
+              throw new Error("No account found with this email. Please sign up first.");
+            }
+          } else {
+            // User exists, try to sign in
+            const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+              email: email,
+              password: password,
+            });
+
+            if (signInError) {
+              throw new Error("Incorrect password. Please try again.");
+            }
+
+            if (signInData.user) {
+              return {
+                id: signInData.user.id,
+                email: email,
+                name: existingUser.name,
+              };
+            }
+          }
+        } catch (error) {
+          console.error('Auth error:', error);
+          throw error;
+        }
+
+        return null;
+      },
+    }),
+  ],
+  callbacks: {
+    async jwt({ token, user }) {
+      if (user) {
+        token.id = user.id;
+      }
+      return token;
+    },
+    async session({ session, token }) {
+      if (token && session.user) {
+        session.user.id = token.id as string;
+      }
+      return session;
+    },
+  },
+  pages: {
+    signIn: "/",
+    error: "/auth/error",
+  },
+} satisfies NextAuthConfig;

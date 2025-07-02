@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { connectToDatabase } from '../../../server/mongodb';
-import Comment from '../../../server/models/Comment';
+import { supabase } from '../../../lib/supabase';
 import { auth } from '../../../server/auth';
 
 export async function GET(request: Request) {
@@ -17,15 +16,22 @@ export async function GET(request: Request) {
   }
 
   try {
-    await connectToDatabase();
-    const comments = await Comment.find({ 
-      tierId, 
-      classmateName 
-    })
-    .sort({ createdAt: -1 })
-    .limit(100); // Limit number of comments returned
+    const { data: comments, error } = await supabase
+      .from('comments')
+      .select(`
+        *,
+        users:created_by(name)
+      `)
+      .eq('tier_id', tierId)
+      .eq('classmate_name', classmateName)
+      .order('created_at', { ascending: false })
+      .limit(100);
 
-    return NextResponse.json(comments);
+    if (error) {
+      throw error;
+    }
+
+    return NextResponse.json(comments || []);
   } catch (error) {
     console.error('Error fetching comments:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
@@ -36,11 +42,11 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const session = await auth();
-    if (!session || !session.user) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = await request.json();
+    const body = await request.json() as { text: string; tierId: string; classmateName: string };
     const { text, tierId, classmateName } = body;
 
     if (!text || !tierId || !classmateName) {
@@ -59,17 +65,21 @@ export async function POST(request: Request) {
       );
     }
 
-    await connectToDatabase();
-    const comment = new Comment({
-      userId: session.user.id,
-      userName: session.user.name || 'Anonymous',
-      text: sanitizedText,
-      tierId,
-      classmateName,
-      createdAt: new Date()
-    });
+    const { data: comment, error } = await supabase
+      .from('comments')
+      .insert({
+        content: sanitizedText,
+        created_by: session.user.id,
+        tier_id: tierId,
+        classmate_name: classmateName,
+      })
+      .select()
+      .single();
 
-    await comment.save();
+    if (error) {
+      throw error;
+    }
+
     return NextResponse.json(comment);
   } catch (error) {
     console.error('Error creating comment:', error);
