@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { DndContext } from "@dnd-kit/core";
 import type { DragEndEvent } from "@dnd-kit/core";
 import { SortableItem } from "./SortableItem";
@@ -13,235 +13,99 @@ interface Tier {
   items: string[];
 }
 
-interface TierListResponse {
-  error?: string;
-  tiers?: Tier[];
-  bin?: string[];
-}
-
-interface TierListProps {
-  classmateName: string;
-}
-
 const DEFAULT_TIERS: Tier[] = [
-  { id: 'S', name: 'S', items: [] },
-  { id: 'A', name: 'A', items: [] },
-  { id: 'B', name: 'B', items: [] },
-  { id: 'C', name: 'C', items: [] },
-  { id: 'D', name: 'D', items: [] },
-  { id: 'F', name: 'F', items: [] },
+  { id: "S", name: "S", items: [] },
+  { id: "A", name: "A", items: [] },
+  { id: "B", name: "B", items: [] },
+  { id: "C", name: "C", items: [] },
+  { id: "D", name: "D", items: [] },
+  { id: "F", name: "F", items: [] },
 ];
 const DEFAULT_BIN: string[] = [
-  'Classmate 1',
-  'Classmate 2',
-  'Classmate 3',
+  "Classmate 1",
+  "Classmate 2",
+  "Classmate 3",
 ];
 
-export default function TierList({ classmateName }: TierListProps) {
+export default function TierList({ classmateName }: { classmateName: string }) {
   const { data: session, status } = useSession();
-  const [tiers, setTiers] = useState<Tier[]>([]);
-  const [bin, setBin] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [tiers, setTiers] = useState<Tier[]>(DEFAULT_TIERS.map(t => ({ ...t })));
+  const [bin, setBin] = useState<string[]>([...DEFAULT_BIN]);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Debug log
-  console.log("Session:", session, "Status:", status);
-
-  const fetchTierList = useCallback(async () => {
-    if (status === "loading") return;
-    if (!session?.user?.id) {
-      setTiers([]);
-      setBin([]);
-      setIsLoading(false);
-      return;
-    }
-    try {
-      const response = await fetch(
-        `/api/tierlist?classmateName=${encodeURIComponent(classmateName)}`
-      );
-      const data = await response.json() as TierListResponse;
-      if (data.error) {
-        setError(data.error);
-      } else if ((data.tiers?.length ?? 0) === 0 && (data.bin?.length ?? 0) === 0) {
-        // Only auto-create if signed in
-        const createResponse = await fetch('/api/tierlist', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            tiers: DEFAULT_TIERS,
-            bin: DEFAULT_BIN,
-            classmateName,
-          }),
-        });
-        const createData = await createResponse.json();
-        if (createData.error) {
-          setError(createData.error);
-        } else {
-          setTiers(DEFAULT_TIERS);
-          setBin(DEFAULT_BIN);
-        }
-      } else {
-        setTiers(data.tiers ?? []);
-        setBin(data.bin ?? []);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch tier list');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [classmateName, session, status]);
-
+  // Fetch saved tier list for authenticated user
   useEffect(() => {
-    if (status === "loading") return;
-    fetchTierList();
-  }, [fetchTierList, status]);
+    if (status !== "authenticated" || !session?.user?.id) return;
+    setIsLoading(true);
+    fetch(`/api/tierlist?classmateName=${encodeURIComponent(classmateName)}`)
+      .then(res => res.json())
+      .then((data) => {
+        if (data.tiers) setTiers(data.tiers);
+        if (data.bin) setBin(data.bin);
+      })
+      .catch(err => setError(err.message))
+      .finally(() => setIsLoading(false));
+  }, [status, session, classmateName]);
 
+  // Handle drag and drop
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over) return;
-
     const activeId = active.id as string;
     const overId = over.id as string;
-
-    // Find the source tier or bin
-    const sourceTierIndex = tiers.findIndex((tier) =>
-      tier.items.includes(activeId)
-    );
+    const sourceTierIndex = tiers.findIndex(t => t.items.includes(activeId));
     const isFromBin = sourceTierIndex === -1;
-
-    // Find the destination tier or bin
-    const destTierIndex = tiers.findIndex((tier) =>
-      tier.items.includes(overId)
-    );
+    const destTierIndex = tiers.findIndex(t => t.items.includes(overId));
     const isToBin = destTierIndex === -1;
-
-    // Update local state
     const newTiers = [...tiers];
     const newBin = [...bin];
-
     if (isFromBin) {
-      // Remove from bin
       const binIndex = newBin.indexOf(activeId);
-      if (binIndex !== -1) {
-        newBin.splice(binIndex, 1);
-      }
+      if (binIndex !== -1) newBin.splice(binIndex, 1);
     } else {
-      // Remove from source tier
-      const sourceItems = newTiers[sourceTierIndex]?.items ?? [];
-      const sourceIndex = sourceItems.indexOf(activeId);
-      if (sourceIndex !== -1) {
-        sourceItems.splice(sourceIndex, 1);
-        }
+      const sourceItems = newTiers[sourceTierIndex]?.items;
+      const sourceIndex = sourceItems?.indexOf(activeId);
+      if (sourceItems && sourceIndex !== undefined && sourceIndex !== -1) sourceItems.splice(sourceIndex, 1);
     }
-
     if (isToBin) {
-      // Add to bin
       newBin.push(activeId);
     } else {
-      // Add to destination tier
-      const destItems = newTiers[destTierIndex]?.items ?? [];
-      const destIndex = destItems.indexOf(overId);
-      destItems.splice(destIndex, 0, activeId);
+      const destItems = newTiers[destTierIndex]?.items;
+      const destIndex = destItems?.indexOf(overId);
+      if (destItems && destIndex !== undefined && destIndex !== -1) destItems.splice(destIndex, 0, activeId);
     }
-
     setTiers(newTiers);
     setBin(newBin);
-
-    // Save to server
-    try {
-        const response = await fetch('/api/tierlist', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        body: JSON.stringify({
-          tiers: newTiers,
-          bin: newBin,
-          classmateName,
-        }),
-      });
-
-      const data = await response.json() as TierListResponse;
-      if (data.error) {
-        setError(data.error);
-        // Revert changes on error
-        void fetchTierList();
+    // Persist for signed-in users
+    if (session?.user?.id) {
+      try {
+        setIsLoading(true);
+        const response = await fetch("/api/tierlist", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tiers: newTiers, bin: newBin, classmateName }),
+        });
+        const data = await response.json();
+        if (data.error) setError(data.error);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to save tier list");
+      } finally {
+        setIsLoading(false);
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save tier list');
-      // Revert changes on error
-      void fetchTierList();
     }
   };
-
-  const handleCreateDefault = async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const response = await fetch('/api/tierlist', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tiers: DEFAULT_TIERS,
-          bin: DEFAULT_BIN,
-          classmateName,
-        }),
-      });
-      const data = await response.json();
-      if (data.error) {
-        setError(data.error);
-      } else {
-        setTiers(DEFAULT_TIERS);
-        setBin(DEFAULT_BIN);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create default tier list');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  if (status === "loading" || isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-lg">Loading...</div>
-      </div>
-    );
-  }
-
-  if (!session?.user?.id) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh]">
-        <h2 className="text-2xl font-bold mb-4">Please sign in to view your tier list.</h2>
-        <AuthButton />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-lg text-red-600">{error}</div>
-      </div>
-    );
-  }
 
   return (
     <div className="container mx-auto p-4">
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">
-          Tier List for {classmateName}
-          </h1>
+        <h1 className="text-2xl font-bold">Tier List for {classmateName}</h1>
         <AuthButton />
       </div>
-
       <DndContext onDragEnd={handleDragEnd}>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {tiers.map((tier) => (
-            <div
-              key={tier.id}
-              className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm"
-        >
+            <div key={tier.id} className="rounded-lg border bg-white p-4 shadow-sm">
               <h2 className="mb-2 text-lg font-semibold">{tier.name}</h2>
               <div className="space-y-2">
                 {tier.items.map((item) => (
@@ -250,8 +114,7 @@ export default function TierList({ classmateName }: TierListProps) {
               </div>
             </div>
           ))}
-
-          <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 shadow-sm">
+          <div className="rounded-lg border bg-gray-50 p-4 shadow-sm">
             <h2 className="mb-2 text-lg font-semibold">Bin</h2>
             <div className="space-y-2">
               {bin.map((item) => (
@@ -261,11 +124,22 @@ export default function TierList({ classmateName }: TierListProps) {
           </div>
         </div>
       </DndContext>
-
-      {session && (
+      {session?.user?.id ? (
         <div className="mt-8">
           <Comments tierId={classmateName} classmateName={classmateName} />
         </div>
+      ) : (
+        <div className="mt-8 text-center text-gray-500">
+          <span>Sign in to comment on classmates.</span>
+        </div>
+      )}
+      {isLoading && (
+        <div className="fixed top-0 left-0 w-full h-full flex items-center justify-center bg-white/60 z-50">
+          <div className="text-lg">Saving...</div>
+        </div>
+      )}
+      {error && (
+        <div className="mt-4 text-red-600 text-center">{error}</div>
       )}
     </div>
   );
